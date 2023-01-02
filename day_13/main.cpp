@@ -79,9 +79,9 @@ int compare_strings(string &left, string &right)
     {
         if (is_number(left_tokens.at(i)) && is_number(right_tokens.at(i)))
         {
-            if (left_tokens.at(i) < right_tokens.at(i))
+            if (stoi(left_tokens.at(i)) < stoi(right_tokens.at(i)))
                 return 1;
-            else if (left_tokens.at(i) > right_tokens.at(i))
+            else if (stoi(left_tokens.at(i)) > stoi(right_tokens.at(i)))
                 return -1;
             continue;
         }
@@ -147,17 +147,41 @@ int main()
     
     file.close();
     
+    vector<string> packets {}; //Task 2
+    
     uint64_t sum {};
     for (int i = 0; i < pairs.size(); ++i)
     {
         string left = pairs.at(i).first;
         string right = pairs.at(i).second;
+        packets.emplace_back(left); //Task 2
+        packets.emplace_back(right); //Task 2
         if (compare_strings(left, right) == 1)
             sum += i + 1;
     }
     
     
     cout << sum << endl;
+    
+    
+    //Task 2
+    
+    packets.emplace_back("[[2]]");
+    packets.emplace_back("[[6]]");
+    
+    std::sort(packets.begin(), packets.end(), [](string a, string b)
+    {
+        return compare_strings(a, b) == 1;
+    });
+    
+    
+    uint64_t answer {1};
+    
+    for (int i = 0; i < packets.size(); ++i)
+        if (packets.at(i) == "[[2]]" || packets.at(i) == "[[6]]")
+            answer *= i + 1;
+        
+    cout << answer << endl;
     
     return EXIT_SUCCESS;
 }
