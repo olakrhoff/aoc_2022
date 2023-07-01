@@ -5,7 +5,13 @@
  *
  * Before I found the bug I began transforming my program into theirs, in hope of narrowing
  * down the possible bug-space. My code ended up quite similar, so I can't take full credit
- * for this solution, at least on part 1.
+ * for this solution. Part 2 I don't completely understand how works, but it was so fascinating
+ * that I decided to keep it here to try and figure out. I tried (in another file) a approach
+ * where I split the valves in two groups where the elephant and I got the two distinct sets.
+ * The computation would then be split in half, but needs to be done twice, so if the sets
+ * were correct it would take as long as task 1. However, I had to iterate through a lot of
+ * combinations of sets. Whilst, Korektur's code has some magic dust that makes it work
+ * significantly faster. (Though, the code don't solve the example correctly, very interesting).
  *
  * Github: https://github.com/korektur
  */
@@ -35,13 +41,13 @@ vector<string> split(const string &input, const string &delimiter)
     return output;
 }
 
-unordered_map<string, uint64_t> flows;
-unordered_map<string, vector<string>> graph;
-unordered_map<string, unordered_map<string, uint16_t>> tunnels;
-vector<string> valves;
-vector<string> valves_with_non_zero_flow;
-unordered_map<string, unordered_map<uint8_t, unordered_map<uint64_t, uint64_t>>> cache;
-unordered_map<string, uint8_t> mapping;
+unordered_map<char16_t, uint16_t> flows;
+unordered_map<char16_t, vector<char16_t>> graph;
+unordered_map<char16_t, unordered_map<char16_t, uint16_t>> tunnels;
+vector<char16_t> valves;
+vector<char16_t> valves_with_non_zero_flow;
+unordered_map<char16_t, unordered_map<uint8_t, unordered_map<uint64_t, uint16_t>>> cache;
+unordered_map<char16_t, uint8_t> mapping;
 
 void floyd_warshall()
 {
@@ -63,21 +69,21 @@ void floyd_warshall()
     for (const auto &i : valves)
         for (const auto &j : valves)
             for (const auto &k : valves)
-                tunnels[j][k] = min(tunnels[j][k], (uint16_t)(tunnels[j][i] + tunnels[i][k]));
+                tunnels[j][k] = min(tunnels[j][k], (uint16_t) (tunnels[j][i] + tunnels[i][k]));
 }
 
-uint64_t find_max_flow(const string &valve, uint8_t time_left, uint64_t state)
+uint16_t find_max_flow(const char16_t valve, uint8_t time_left, uint64_t state)
 {
     // If cached, use that
     if (cache[valve][time_left][state] != 0)
         return cache[valve][time_left][state];
     if (time_left <= 2)
         return 0; // We don't have time to move and release more pressure
-    static uint16_t all_opened = ((uint64_t) 1 << mapping.size()) - 1;
+    static uint64_t all_opened = ((uint64_t) 1 << mapping.size()) - 1;
     if (state == all_opened)
         return 0; // All valves are open, can't increase value further
     
-    uint64_t result_value {};
+    uint16_t result_value {};
     
     for (const auto &to: valves_with_non_zero_flow)
     {
@@ -90,17 +96,47 @@ uint64_t find_max_flow(const string &valve, uint8_t time_left, uint64_t state)
         // Should not be needed, but just a safeguard
         if (flows[to] == 0)
             continue;
-        //if (to == valve || ((state >> mapping[to]) & 1U) == 1 || flows[to] == 0) continue;
         uint8_t travel_time = tunnels[valve][to];
         // If we run out of time moving this distance, there is no point to move
         if (travel_time + 1 >= time_left)
             continue;
         uint8_t remaining_time = time_left - travel_time - 1;
-        uint64_t new_flow = flows[to] * remaining_time;
-        uint64_t new_state = state | ((uint64_t)1 << mapping[to]);
-        result_value = max(result_value, new_flow + find_max_flow(to, remaining_time, new_state));
+        uint16_t new_flow = flows[to] * remaining_time;
+        uint16_t new_state = state | ((uint16_t) 1 << mapping[to]);
+        result_value = max(result_value, static_cast<uint16_t>(new_flow + find_max_flow(to, remaining_time, new_state)));
     }
     cache[valve][time_left][state] = result_value;
+    return result_value;
+}
+
+uint16_t find_max_flow_help(const char16_t valve, uint8_t time_left, uint64_t state)
+{
+    uint16_t result_value {};
+    if (time_left > 2)
+    {
+        for (const auto &to: valves_with_non_zero_flow)
+        {
+            // If node to potentially move to is opened, ignore it.
+            if ((state >> mapping[to]) & 0b1)
+                continue;
+            // Can't go to itself
+            if (to == valve)
+                continue;
+            // Should not be needed, but just a safeguard
+            if (flows[to] == 0)
+                continue;
+            uint8_t travel_time = tunnels[valve][to];
+            // If we run out of time moving this distance, there is no point to move
+            if (travel_time + 1 >= time_left)
+                continue;
+            uint8_t remaining_time = time_left - travel_time - 1;
+            uint16_t new_flow = flows[to] * remaining_time;
+            uint16_t new_state = state | ((uint16_t) 1 << mapping[to]);
+            result_value = max(result_value, static_cast<uint16_t>(new_flow + find_max_flow_help(to, remaining_time, new_state)));
+        }
+    }
+    if (time_left < 15)
+        result_value = max(result_value, find_max_flow('AA', 26, state));
     return result_value;
 }
 
@@ -122,7 +158,8 @@ int main()
     {
         getline(file, temp);
         
-        string node_name = temp.substr(6, 2);
+        string node_name_string = temp.substr(6, 2);
+        char16_t node_name = ((char16_t)node_name_string[0] << 8) | (char16_t)node_name_string[1];
         uint64_t flow_rate = stoi(temp.substr(23, temp.find(';')));
         flows[node_name] = flow_rate; // Set the flow rate
         if (flow_rate > 0)
@@ -137,8 +174,10 @@ int main()
             extra = 1;
         
         string to_nodes = temp.substr(temp.find("to valve") + 9 + extra);
-        vector<string> nodes = split(to_nodes, ", ");
-
+        vector<string> nodes_string = split(to_nodes, ", ");
+        vector<char16_t> nodes;
+        for (auto n : nodes_string)
+            nodes.emplace_back(((char16_t)n[0] << 8) | (char16_t)n[1]);
         graph[node_name] = nodes; // Add node and neighbours to graph
     }
     
@@ -147,9 +186,11 @@ int main()
     floyd_warshall();
     
     auto start = std::chrono::high_resolution_clock::now();
-    int64_t res = find_max_flow("AA", 30, 0);
+    //int64_t res = find_max_flow('AA', 30, 0);
+    int64_t res = find_max_flow_help('AA', 26, 0);
     auto stop = std::chrono::high_resolution_clock::now();
-    cout << "Res: " << res << "\tTime: " << duration_cast<std::chrono::milliseconds>(stop - start).count() << "ms" << endl;
+    cout << "Res: " << res << "\tTime: " << duration_cast<std::chrono::milliseconds>(stop - start).count() << "ms"
+         << endl;
     
     return EXIT_SUCCESS;
 }
