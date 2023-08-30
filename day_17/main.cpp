@@ -5,7 +5,7 @@
 
 using namespace std;
 
-#define DEBUG 1
+#define DEBUG 0
 
 
 #define NUM_ROCKS_1 2022 // Part 1
@@ -141,7 +141,7 @@ typedef struct chamber
     uint64_t rock_height {}; // The index in stack where the bottom of the rock starts
     uint64_t rocks_added {};
     bool is_current_rock_floating {true};
-    std::map<std::tuple<uint64_t, uint64_t, vector<uint8_t>>, std::tuple<uint64_t, uint64_t, uint64_t>> seen;
+    //std::map<std::tuple<uint64_t, uint64_t, vector<uint8_t>>, std::tuple<uint64_t, uint64_t, uint64_t>> seen;
 
     void add_rock(rock_t rock)
     {
@@ -252,7 +252,7 @@ typedef struct chamber
     
     uint64_t highest_rock()
     {
-        return stack.size() - 1;
+        return stack.size();
     }
     
     vector<uint8_t> get_current_rock_slice() const
@@ -317,9 +317,71 @@ uint64_t simulate2(stream_t &stream)
     vector<vector<uint8_t>> starts;
     vector<uint64_t> res;
     vector<uint64_t> rocks_used;
+    
+    vector<pair<vector<uint8_t>, uint64_t>> prevs;
+    vector<chamber_t> prev_chambers;
+    uint64_t height_by_reps = 0;
+    uint8_t rep = 0;
+    bool found = false;
     // Loop over the number of rocks to fall
     for (uint64_t i = 0; i < NUM_ROCKS_2; ++i)
     {
+        if (i % (NUM_UNIQUE_ROCKS * STREAM_LENGTH) == 0 && i != 0 && !found)
+        {
+            auto temp = chamber.get_current_rock_slice();
+            if (!prevs.empty())
+            {
+                if (temp == prevs.at(0).first)
+                {
+                    rep++;
+                    if (rep >= 2)
+                    {
+                        int start;
+                        bool pattern;
+                        // Find all instances of potential reps
+                        for (start = 1; start < prevs.size(); ++start)
+                        {
+                            if (prevs.at(start).first == prevs.at(0).first && start * 2 == prevs.size())
+                            {
+                                pattern = true;
+                                // Loop through and check if there is a perfect pattern
+                                for (int idx = 0; idx < start; ++idx)
+                                {
+                                    if (prevs.at(idx).first != prevs.at(idx + start).first)
+                                    {
+                                        pattern = false;
+                                        break;
+                                    }
+                                }
+                                
+                                if (pattern)
+                                    break;
+                            }
+                        }
+                        if (pattern)
+                        {
+                            uint64_t current_height = chamber.highest_rock();
+                            uint64_t height_per_rep = current_height - prevs.at(0).second;
+                            uint64_t rocks_left = NUM_ROCKS_2 - (i - 1);
+                            uint64_t rocks_per_rep = NUM_UNIQUE_ROCKS * STREAM_LENGTH * prevs.size();
+                            uint64_t reps = (rocks_left / rocks_per_rep) + 1;
+                            height_by_reps = reps * height_per_rep;
+    
+                            uint64_t rocks_to_iterate = NUM_ROCKS_2 - (rocks_left % rocks_per_rep);
+                            i = rocks_to_iterate;
+    
+                            prevs.emplace_back(temp, chamber.highest_rock());
+                            prev_chambers.emplace_back(chamber);
+                            found = true;
+                            continue;
+                        }
+                    }
+                }
+            }
+            prevs.emplace_back(temp, chamber.highest_rock());
+            prev_chambers.emplace_back(chamber);
+        }
+        
         rock_t current_rock = ROCKS[i % NUM_UNIQUE_ROCKS];
         chamber.add_rock(current_rock);
         //chamber.print();
@@ -330,43 +392,12 @@ uint64_t simulate2(stream_t &stream)
             chamber.apply_falling();
             //chamber.print();
         }
-
-        // A new rock has fallen into place, check for a repeating pattern
-        std::tuple<uint64_t, uint64_t, vector<uint8_t>> key = make_tuple(i % NUM_UNIQUE_ROCKS, stream.get_index(), chamber.get_current_rock_slice());
-        auto value = chamber.seen.find(key);
-        if (value == chamber.seen.end())
-        {
-            chamber.seen.insert(make_pair(key, make_tuple(1, chamber.highest_rock(), chamber.rocks_added)));
-            value = chamber.seen.find(key);
-        }
-        //Check for third occurrence
-        if (get<0>(value->second) == 2)
-        {
-            uint64_t delta_top = chamber.highest_rock() -  get<1>(value->second);
-            uint64_t delta_num_rocks = chamber.rocks_added - get<2>(value->second);
-            uint64_t reps = (NUM_ROCKS_2 - chamber.rocks_added) / delta_num_rocks;
-            uint64_t add_by_reps = reps * delta_top;
-
-            for (uint64_t j = i + (reps * delta_num_rocks); j < NUM_ROCKS_2; ++j)
-            {
-                current_rock = ROCKS[j % NUM_UNIQUE_ROCKS];
-                chamber.add_rock(current_rock);
-                //chamber.print();
-                while (chamber.has_floating_rock())
-                {
-                    chamber.apply_gas(stream.next_stream());
-                    //chamber.print();
-                    chamber.apply_falling();
-                    //chamber.print();
-                }
-            }
-
-            return chamber.highest_rock() + add_by_reps;
-        }
-        value->second = make_tuple(get<0>(value->second) + 1, chamber.highest_rock(), chamber.rocks_added);
     }
     
-    return chamber.highest_rock();
+    uint64_t start = prevs.at(0).second;
+    uint64_t end = chamber.highest_rock() - prevs.back().second;
+    uint64_t height = start + height_by_reps + end;
+    return height;
 }
 
 int main()
@@ -401,7 +432,13 @@ int main()
     
 
     //cout << "Height: " << simulate(stream) << endl;
-    cout << "Height: " << simulate2(stream) << endl;
+    uint64_t ans = simulate2(stream);
+    cout << "Height: " << ans << endl;
+    cout << "Diff: ";
+    if (DEBUG)
+        cout << min(1514285714288 - ans, ans - 1514285714288) << endl;
+    else
+        cout << min(1564705882327 - ans, ans - 1564705882327) << (ans > 1564705882327 ? " Big" : " Small") << endl;
     
     
     
