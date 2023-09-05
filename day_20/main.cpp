@@ -49,9 +49,9 @@ typedef struct double_linked_list
             cout << "Tried to move node, when there are no nodes" << endl;
             exit(32); // Bad should not happen
         }
+        shifts %= size - 1;
         while (shifts < 0)
             shifts += size - 1;
-        shifts %= size - 1;
         if (shifts == 0)
             return;
         if (node == head)
