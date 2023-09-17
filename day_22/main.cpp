@@ -5,7 +5,7 @@
 
 using namespace std;
 
-#define DEBUG 1
+#define DEBUG 0
 
 //#define SHOW_MAP
 
@@ -242,6 +242,70 @@ typedef struct tile {
     int8_t sides[4] {-1, -1, -1, -1};
 } tile_t;
 
+#define LINE_LENGTH 50
+#if DEBUG
+#define LINE_LENGTH 4
+#endif
+
+tile_t get_current_tile(coord_t marker, vector<tile_t> &cube)
+{
+    for (auto t : cube)
+    {
+        auto upper_left = t.coords.at(0).at(0);
+        auto lower_right = t.coords.at(LINE_LENGTH - 1).at(LINE_LENGTH - 1);
+        if (marker.col >= upper_left.col &&
+            marker.row >= upper_left.row &&
+            marker.col <= lower_right.col &&
+            marker.row <= lower_right.row)
+        {
+            return t;
+        }
+    }
+    cout << "Bad, should have found a side on the cube the marker belong too" << endl;
+    exit(11);
+}
+
+int get_current_tile_index(coord_t marker, vector<tile_t> &cube)
+{
+    for (int i = 0; i < cube.size(); ++i)
+    {
+        auto t = cube.at(i);
+        auto upper_left = t.coords.at(0).at(0);
+        auto lower_right = t.coords.at(LINE_LENGTH - 1).at(LINE_LENGTH - 1);
+        if (marker.col >= upper_left.col &&
+            marker.row >= upper_left.row &&
+            marker.col <= lower_right.col &&
+            marker.row <= lower_right.row)
+        {
+            return i;
+        }
+    }
+    cout << "Bad, should have found an index for side on the cube the marker belong too" << endl;
+    exit(9);
+}
+
+void rotate_coord(coord_t &coord, int rotations)
+{
+    coord_t base;
+    base.col = (coord.col / LINE_LENGTH) * LINE_LENGTH;
+    base.row = (coord.row / LINE_LENGTH) * LINE_LENGTH;
+    
+    coord_t temp;
+    temp.col = coord.col % LINE_LENGTH;
+    temp.row = coord.row % LINE_LENGTH;
+    for (int i = 0; i < rotations; ++i)
+    {
+        int temp_row = temp.row;
+        temp.row = temp.col;
+        temp.col = LINE_LENGTH - temp_row - 1;
+    }
+    
+    base.col += temp.col;
+    base.row += temp.row;
+    
+    coord = base;
+}
+
 bool move_marker_on_cube(marker_t &marker, vector<tile_t> &cube)
 {
     // Check if there is a wall directly adjacent to us in the direction we are moving
@@ -250,16 +314,139 @@ bool move_marker_on_cube(marker_t &marker, vector<tile_t> &cube)
     {
         case RIGHT:
         {
+            // If we can move within the current side of the cube
+            if (marker.coord.col % LINE_LENGTH < LINE_LENGTH - 1)
+            {
+                tile_t current_side = get_current_tile(marker.coord, cube);
+                if (current_side.coords.at(marker.coord.row % LINE_LENGTH).at((marker.coord.col + 1) % LINE_LENGTH).is_wall)
+                    return false;
+                ++marker.coord.col;
+                return true;
+            }
             
+            // If we can't move within the current side of the cube
+            // we need to figure out where on the other side we must look
+            int side_index = get_current_tile(marker.coord, cube).sides[RIGHT];
+            
+            tile_t new_side = cube.at(side_index);
+            DIRECTION_T new_side_direction;
+            for (int i = 0; i < 4; ++i)
+                if (new_side.sides[i] == get_current_tile_index(marker.coord, cube))
+                    new_side_direction = (DIRECTION_T)i;
+            
+            coord_t new_coord;
+            new_coord.row = (marker.coord.row % LINE_LENGTH) + new_side.coords.at(0).at(0).row;
+            new_coord.col = new_side.coords.at(0).at(0).col;
+            
+            int rotations = (new_side_direction + 4 - DIRECTION_T::LEFT) % 4;
+            
+            rotate_coord(new_coord, rotations);
+            
+            if (new_side.coords.at(new_coord.row % LINE_LENGTH).at(new_coord.col % LINE_LENGTH).is_wall)
+                return false;
+            marker.coord = new_coord;
+            marker.dir =  (DIRECTION_T)((marker.dir + rotations) % 4);
+            return true;
         }
         case DOWN:
         {
+            if (marker.coord.row % LINE_LENGTH < LINE_LENGTH - 1)
+            {
+                tile_t current_side = get_current_tile(marker.coord, cube);
+                if (current_side.coords.at((marker.coord.row + 1) % LINE_LENGTH).at(marker.coord.col % LINE_LENGTH).is_wall)
+                    return false;
+                ++marker.coord.row;
+                return true;
+            }
+            
+            int side_index = get_current_tile(marker.coord, cube).sides[DOWN];
+            
+            tile_t new_side = cube.at(side_index);
+            DIRECTION_T new_side_direction;
+            for (int i = 0; i < 4; ++i)
+                if (new_side.sides[i] == get_current_tile_index(marker.coord, cube))
+                    new_side_direction = (DIRECTION_T)i;
+            
+            coord_t new_coord;
+            new_coord.row = new_side.coords.at(0).at(0).row;
+            new_coord.col = (marker.coord.col % LINE_LENGTH) + new_side.coords.at(0).at(0).col;
+            
+            int rotations = (new_side_direction + 4 - DIRECTION_T::UP) % 4;
+            
+            rotate_coord(new_coord, rotations);
+            
+            if (new_side.coords.at(new_coord.row % LINE_LENGTH).at(new_coord.col % LINE_LENGTH).is_wall)
+                return false;
+            marker.coord = new_coord;
+            marker.dir =  (DIRECTION_T)((marker.dir + rotations) % 4);
+            return true;
         }
         case LEFT:
         {
+            if (marker.coord.col % LINE_LENGTH > 0)
+            {
+                tile_t current_side = get_current_tile(marker.coord, cube);
+                if (current_side.coords.at(marker.coord.row % LINE_LENGTH).at((marker.coord.col - 1) % LINE_LENGTH).is_wall)
+                    return false;
+                --marker.coord.col;
+                return true;
+            }
+            
+            
+            int side_index = get_current_tile(marker.coord, cube).sides[LEFT];
+            
+            tile_t new_side = cube.at(side_index);
+            DIRECTION_T new_side_direction;
+            for (int i = 0; i < 4; ++i)
+                if (new_side.sides[i] == get_current_tile_index(marker.coord, cube))
+                    new_side_direction = (DIRECTION_T)i;
+            
+            coord_t new_coord;
+            new_coord.row = (marker.coord.row % LINE_LENGTH) + new_side.coords.at(0).at(0).row;
+            new_coord.col = new_side.coords.at(0).at(LINE_LENGTH - 1).col;
+            
+            int rotations = (new_side_direction + 4 - DIRECTION_T::RIGHT) % 4;
+            
+            rotate_coord(new_coord, rotations);
+            
+            if (new_side.coords.at(new_coord.row % LINE_LENGTH).at(new_coord.col % LINE_LENGTH).is_wall)
+                return false;
+            marker.coord = new_coord;
+            marker.dir =  (DIRECTION_T)((marker.dir + rotations) % 4);
+            return true;
         }
         case UP:
         {
+            if (marker.coord.row % LINE_LENGTH > 0)
+            {
+                tile_t current_side = get_current_tile(marker.coord, cube);
+                if (current_side.coords.at((marker.coord.row - 1) % LINE_LENGTH).at(marker.coord.col % LINE_LENGTH).is_wall)
+                    return false;
+                --marker.coord.row;
+                return true;
+            }
+            
+            int side_index = get_current_tile(marker.coord, cube).sides[UP];
+            
+            tile_t new_side = cube.at(side_index);
+            DIRECTION_T new_side_direction;
+            for (int i = 0; i < 4; ++i)
+                if (new_side.sides[i] == get_current_tile_index(marker.coord, cube))
+                    new_side_direction = (DIRECTION_T)i;
+            
+            coord_t new_coord;
+            new_coord.row = new_side.coords.at(LINE_LENGTH - 1).at(0).row;
+            new_coord.col = (marker.coord.col % LINE_LENGTH) + new_side.coords.at(0).at(0).col;
+            
+            int rotations = (new_side_direction + 4 - DIRECTION_T::DOWN) % 4;
+            
+            rotate_coord(new_coord, rotations);
+            
+            if (new_side.coords.at(new_coord.row % LINE_LENGTH).at(new_coord.col % LINE_LENGTH).is_wall)
+                return false;
+            marker.coord = new_coord;
+            marker.dir =  (DIRECTION_T)((marker.dir + rotations) % 4);
+            return true;
         }
     }
 }
@@ -291,10 +478,6 @@ void execute_instruction_on_cube(marker_t &marker, vector<tile_t> &cube, instruc
 vector<tile_t> translate_map_to_cube(vector<vector<coord_t>> map)
 {
     vector<tile_t> tiles(6);
-    int LINE_LENGTH = 50;
-    if (DEBUG)
-        LINE_LENGTH = 4;
-    
     
     // We know that there will be six sides to a cube, hence we have six (50x50) tiles
     for (int i = 0; i < 6; ++i)
